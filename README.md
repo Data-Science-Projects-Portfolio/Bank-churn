@@ -1,2 +1,3 @@
 # Bank-churn
 Background: The customer churn dataset is a structured collection of banking customer information designed to support predictive analysis of churn, that is the likelihood of customers discontinuing their use of a bank's products or services. The dataset includes a range of attributes describing each customer, such as credit score, country of residence, gender, age, tenure, account balance, number of products held, credit card ownership, active membership status, estimated salary, and churn outcome. The churn variable indicates whether a customer has exited or remained with the institution.
+Expected Outcomes?
