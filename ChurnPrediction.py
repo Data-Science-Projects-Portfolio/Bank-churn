@@ -1,3 +1,4 @@
+
 import pandas as pd
 
 # Load dataset
@@ -13,3 +14,6 @@ print(df.shape)
 # Column information
 print("\nColumn Information:")
 print(df.info())
+
+
+
