@@ -1,3 +1,21 @@
+# Every Team Member Should Follow This Process:
+# Update main branch
+# git checkout main
+# git pull origin main
+
+# Create task branch
+#git checkout -b feature/my-task
+
+# Do work
+
+# Save changes
+# git add .
+
+# Commit
+# git commit -m "Completed task"
+
+# Push
+# git push origin feature/my-task
 
 import pandas as pd
 import seaborn as sns
