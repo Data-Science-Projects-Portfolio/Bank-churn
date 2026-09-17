@@ -324,3 +324,4 @@ baseline_model.fit(
 #I have stopped here. I will continue, allow me to follow this setup and continue building the model. then we will discuss
 #You can run the code, correct errors and see the results. Once you are done, we can discuss the next steps.
 
+#Veronica's edit
