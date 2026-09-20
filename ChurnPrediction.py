@@ -325,3 +325,40 @@ baseline_model.fit(
 #You can run the code, correct errors and see the results. Once you are done, we can discuss the next steps.
 
 #Veronica's edit
+
+#The next logical move is to test it on unseen data and measure whether it actually works.
+# Howeever, before training/evaluation, confirm whether our CSV uses Churn or churn as the target variable. If it is churn, we need to change the TARGET variable to "churn" instead of "Churn".
+#Our code mixes both: earlier: df["churn".] later: TARGET = "Churn". That mismatch can cause errors or wrong results. Fix that before moving on.
+
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+
+y_pred = baseline_model.predict(X_test)
+y_proba = baseline_model.predict_proba(X_test)[:, 1]
+
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+
+print("ROC-AUC:")
+print(roc_auc_score(y_test, y_proba))
+
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+#this tells us:
+
+#how many churners were correctly found
+#how many were missed
+#whether the model is actually useful
+#Compare against our success criteria
+#we wrote:
+
+#ROC-AUC > 0.80
+#Recall > 80% for churn class
+#So after evaluation, check whether our model meets those thresholds.
+
+#If it does not, then the next step is:
+
+#tune hyperparameters
+#try other models
+#check class imbalance
+#adjust evaluation strategy
