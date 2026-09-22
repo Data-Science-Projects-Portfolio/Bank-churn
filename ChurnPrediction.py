@@ -125,6 +125,8 @@
 # %%
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -200,18 +202,15 @@ plt.show()
 
 # %%
 # #Separate Features and Target
-TARGET = "Churn"
+TARGET = "churn"
 
 X = df.drop(TARGET, axis=1)
 
 y = df[TARGET]
 
 # %%
-#Encode Target
-y = y.map({
-    "Yes":1,
-    "No":0
-})
+# Encode the numeric target from the dataset.
+y = y.astype(int)
 
 # %%
 # #Identify Column Types
@@ -359,6 +358,7 @@ print(confusion_matrix(y_test, y_pred))
 #If it does not, then the next step is:
 
 #tune hyperparameters
+# Lily is testing collaboration.
 #try other models
 #check class imbalance
 #adjust evaluation strategy
