@@ -168,6 +168,20 @@ plt.show()
 #Is churn balanced?
 #Is churn rare?
 
+# added by Lily
+
+# Distribution of 'age' and 'credit_score' by churn
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+sns.histplot(x='age', hue='churn', data=df, kde=True, ax=axes[0], palette='coolwarm')
+axes[0].set_title('Age Distribution by Churn')
+
+sns.histplot(x='credit_score', hue='churn', data=df, kde=True, ax=axes[1], palette='coolwarm')
+axes[1].set_title('Credit Score Distribution by Churn')
+
+plt.tight_layout()
+plt.show()
+
 # %%
 #NUMERICAL FEATURES
 numerical_cols = df.select_dtypes(
