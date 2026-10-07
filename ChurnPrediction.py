@@ -200,7 +200,7 @@ plt.show()
 
 # %%
 # #Separate Features and Target
-TARGET = "Churn"
+TARGET = "churn"
 
 X = df.drop(TARGET, axis=1)
 
