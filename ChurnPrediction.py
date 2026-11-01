@@ -214,18 +214,22 @@ plt.show()
 
 # %%
 # #Separate Features and Target
-TARGET = "Churn"
+TARGET = "churn"
 
-X = df.drop(TARGET, axis=1)
-
+X = df.drop(columns=[TARGET, "customer_id"])
 y = df[TARGET]
+print(y.value_counts())
 
-# %%
+#The CSV already stores churn as 0 and 1—there are 7,963 non-churn and 2,037 churn rows. 
+# The "Yes"/"No" mapping in ChurnPrediction.py:225 doesn’t match these values.
+# Therefore, I removed the mapping below and will use the existing 0/1 values for churn.
+# # %%
 #Encode Target
-y = y.map({
-    "Yes":1,
-    "No":0
-})
+# y = y.map({
+#    "Yes":1,
+#    "No":0
+#})
+# Veronica 
 
 # %%
 # #Identify Column Types
@@ -343,6 +347,7 @@ baseline_model.fit(
 #The next logical move is to test it on unseen data and measure whether it actually works.
 # Howeever, before training/evaluation, confirm whether our CSV uses Churn or churn as the target variable. If it is churn, we need to change the TARGET variable to "churn" instead of "Churn".
 #Our code mixes both: earlier: df["churn".] later: TARGET = "Churn". That mismatch can cause errors or wrong results. Fix that before moving on.
+# Updated TARGET variable to "churn" above, instead of "Churn".
 
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
@@ -376,3 +381,125 @@ print(confusion_matrix(y_test, y_pred))
 #try other models
 #check class imbalance
 #adjust evaluation strategy
+
+Veronica's edit below:
+#The logistic-regression baseline runs, but it doesn’t meet the goals we wrote down:
+
+#Churn recall: 0.19 — it found 76 of 407 churners and missed 331.
+#ROC-AUC: 0.775 — below your stated goal of 0.80.
+#Accuracy: 0.81 — but accuracy alone is misleading here because most customers in the data did not churn.
+
+#What to do next:
+#Keep this result as our baseline. Don’t adjust the model based on the test-set results; use the training data for experiments and validation so the test set remains a fair final check.
+
+#select a decision threshold using a validation split, evaluate once on your held-out test set, create example risk scores, and show logistic-regression feature associations.
+
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    precision_recall_curve,
+    roc_auc_score,
+)
+from sklearn.model_selection import train_test_split
+
+# Keep the existing X_train / X_test split.
+# Split only the training data so X_test remains held out for final evaluation.
+X_fit, X_val, y_fit, y_val = train_test_split(
+    X_train,
+    y_train,
+    test_size=0.25,
+    random_state=42,
+    stratify=y_train,
+)
+
+# Train the existing preprocessing + logistic regression pipeline.
+baseline_model.fit(X_fit, y_fit)
+
+# Choose a threshold on validation data to target at least 80% churn recall.
+val_proba = baseline_model.predict_proba(X_val)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_val, val_proba)
+
+target_recall = 0.80
+eligible = np.flatnonzero(recall[:-1] >= target_recall)
+
+if len(eligible) == 0:
+    raise ValueError("No validation threshold achieves the target churn recall.")
+
+# Among thresholds meeting the recall goal, choose the one with the best precision.
+best_index = eligible[np.argmax(precision[eligible])]
+decision_threshold = float(thresholds[best_index])
+
+print(f"Selected decision threshold: {decision_threshold:.3f}")
+print(f"Validation precision at threshold: {precision[best_index]:.3f}")
+print(f"Validation recall at threshold: {recall[best_index]:.3f}")
+
+# Evaluate once on the held-out test data.
+test_proba = baseline_model.predict_proba(X_test)[:, 1]
+y_pred = (test_proba >= decision_threshold).astype(int)
+
+print("\nTest classification report:")
+print(
+    classification_report(
+        y_test,
+        y_pred,
+        labels=[0, 1],
+        target_names=["No churn", "Churn"],
+        zero_division=0,
+    )
+)
+
+print("Test ROC-AUC:", roc_auc_score(y_test, test_proba))
+print("Test confusion matrix:")
+print(confusion_matrix(y_test, y_pred, labels=[0, 1]))
+
+# Example risk categories for this project.
+# These 20% and 50% boundaries are provisional; confirm them with business needs.
+risk_category = pd.cut(
+    test_proba,
+    bins=[-np.inf, 0.20, 0.50, np.inf],
+    labels=["Low", "Medium", "High"],
+).astype(str)
+
+# Keep the original customer IDs for these held-out test records.
+# This file is for evaluation; don't include actual_churn in real customer scoring.
+test_results = pd.DataFrame(
+    {
+        "customer_id": df.loc[X_test.index, "customer_id"].to_numpy(),
+        "actual_churn": y_test.to_numpy(),
+        "churn_probability": test_proba,
+        "predicted_churn": y_pred,
+        "risk_category": risk_category,
+    },
+    index=X_test.index,
+)
+
+test_results.to_csv("churn_test_risk_scores.csv", index=False)
+print("\nSaved test scores to churn_test_risk_scores.csv")
+print(test_results.head())
+
+# Logistic-regression feature associations.
+# These show model associations, not proof that a feature causes churn.
+feature_names = baseline_model.named_steps["preprocessor"].get_feature_names_out()
+coefficients = baseline_model.named_steps["model"].coef_[0]
+
+driver_table = pd.DataFrame(
+    {
+        "feature": feature_names,
+        "coefficient": coefficients,
+    }
+)
+
+print("\nFeatures associated with higher churn scores:")
+print(driver_table.nlargest(10, "coefficient").to_string(index=False))
+
+print("\nFeatures associated with lower churn scores:")
+print(driver_table.nsmallest(10, "coefficient").to_string(index=False))
+
+# In a run against our CSV, this approach reached about 0.86 test recall,
+# but precision was about 0.31 and ROC-AUC about 0.775. 
+# That means it catches more churners, but also flags many customers who do not churn; 
+# the ROC-AUC goal of 0.80 still isn’t met. The risk bands in the code are examples, not business-approved cutoffs.
+
+#This is a useful prototype for scores and explanations, but it isn’t production-ready yet.
+#The next modeling work should compare other models using training/validation data, 
+#then check probability calibration and agree on risk-category cutoffs before deploying.
