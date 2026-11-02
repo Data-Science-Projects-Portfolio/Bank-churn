@@ -216,6 +216,8 @@ plt.show()
 # #Separate Features and Target
 TARGET = "churn"
 
+X = df.drop(TARGET, axis=1)
+
 X = df.drop(columns=[TARGET, "customer_id"])
 y = df[TARGET]
 print(y.value_counts())
@@ -382,7 +384,7 @@ print(confusion_matrix(y_test, y_pred))
 #check class imbalance
 #adjust evaluation strategy
 
-Veronica's edit below:
+#Veronica's edit below:
 #The logistic-regression baseline runs, but it doesn’t meet the goals we wrote down:
 
 #Churn recall: 0.19 — it found 76 of 407 churners and missed 331.
@@ -503,3 +505,76 @@ print(driver_table.nsmallest(10, "coefficient").to_string(index=False))
 #This is a useful prototype for scores and explanations, but it isn’t production-ready yet.
 #The next modeling work should compare other models using training/validation data, 
 #then check probability calibration and agree on risk-category cutoffs before deploying.
+# Lilys edits
+#Phase 4: Training and Comparing Multiple Models
+#===============================================
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import precision_score, recall_score, f1_score
+from xgboost import XGBClassifier
+
+models = {
+    "Logistic Regression": LogisticRegression(
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=42,
+    ),
+    "Random Forest": RandomForestClassifier(
+        class_weight="balanced",
+        random_state=42,
+    ),
+    "XGBoost": XGBClassifier(
+        scale_pos_weight=4,
+        random_state=42,
+        eval_metric="logloss",
+    ),
+    "Gradient Boosting": GradientBoostingClassifier(random_state=42),
+}
+
+results = []
+
+for name, classifier in models.items():
+    pipeline = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            ("model", classifier),
+        ]
+    )
+
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    y_proba = pipeline.predict_proba(X_test)[:, 1]
+
+    results.append(
+        {
+            "Model": name,
+            "Precision (Churn)": precision_score(y_test, y_pred, zero_division=0),
+            "Recall (Churn)": recall_score(y_test, y_pred, zero_division=0),
+            "F1-Score (Churn)": f1_score(y_test, y_pred, zero_division=0),
+            "ROC-AUC Score": roc_auc_score(y_test, y_proba),
+        }
+    )
+
+results_df = pd.DataFrame(results)
+print("\nModel Performance Comparison:")
+print(results_df.to_string(index=False))
+
+plt.figure(figsize=(12, 6))
+results_melted = pd.melt(
+    results_df,
+    id_vars="Model",
+    var_name="Metric",
+    value_name="Score",
+)
+sns.barplot(
+    x="Model",
+    y="Score",
+    hue="Metric",
+    data=results_melted,
+    palette="viridis",
+)
+plt.title("Model Performance Comparison (Churn Class)")
+plt.ylim(0, 1.0)
+plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.show()
