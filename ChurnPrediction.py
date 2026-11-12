@@ -337,7 +337,12 @@ baseline_model.fit(
 # Howeever, before training/evaluation, confirm whether our CSV uses Churn or churn as the target variable. If it is churn, we need to change the TARGET variable to "churn" instead of "Churn".
 #Our code mixes both: earlier: df["churn".] later: TARGET = "Churn". That mismatch can cause errors or wrong results. Fix that before moving on.
 
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    precision_recall_curve,
+    roc_auc_score,
+)
 
 y_pred = baseline_model.predict(X_test)
 y_proba = baseline_model.predict_proba(X_test)[:, 1]
@@ -440,5 +445,108 @@ plt.title("Model Performance Comparison (Churn Class)")
 plt.ylim(0, 1.0)
 plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.tight_layout()
+plt.show()
+
+#Step 5: Decision Threshold Optimization for Gradient Boosting
+#==============================================================
+# Select the threshold on validation data so the test set remains untouched.
+X_gb_train, X_gb_validation, y_gb_train, y_gb_validation = train_test_split(
+    X_train,
+    y_train,
+    test_size=0.2,
+    random_state=42,
+    stratify=y_train,
+)
+
+gb_pipeline = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("model", GradientBoostingClassifier(random_state=42)),
+    ]
+)
+gb_pipeline.fit(X_gb_train, y_gb_train)
+
+y_proba_gb_validation = gb_pipeline.predict_proba(X_gb_validation)[:, 1]
+precisions, recalls, thresholds = precision_recall_curve(
+    y_gb_validation,
+    y_proba_gb_validation,
+)
+
+target_recall = 0.80
+valid_indices = np.flatnonzero(recalls[:-1] >= target_recall)
+if valid_indices.size == 0:
+    raise ValueError(f"No decision threshold reaches recall {target_recall:.0%}.")
+
+best_index = valid_indices[-1]
+best_threshold = thresholds[best_index]
+chosen_recall = recalls[best_index]
+chosen_precision = precisions[best_index]
+
+print("\n--- Gradient Boosting Threshold Optimization ---")
+print(f"Target validation recall: {target_recall:.1%}")
+print(f"Selected threshold: {best_threshold:.4f}")
+print(f"Validation recall: {chosen_recall:.2%}")
+print(f"Validation precision: {chosen_precision:.2%}")
+
+plt.figure(figsize=(10, 6))
+plt.plot(thresholds, precisions[:-1], "b--", label="Precision", linewidth=2)
+plt.plot(thresholds, recalls[:-1], "g-", label="Recall", linewidth=2)
+plt.axvline(
+    x=best_threshold,
+    color="r",
+    linestyle=":",
+    label=f"Selected threshold ({best_threshold:.3f})",
+)
+plt.title("Precision and Recall vs. Decision Threshold (Gradient Boosting)")
+plt.xlabel("Threshold")
+plt.ylabel("Score")
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.legend(loc="best")
+plt.tight_layout()
+plt.show()
+
+# Refit on all training data and evaluate once on the held-out test set.
+gb_pipeline.fit(X_train, y_train)
+y_proba_gb_test = gb_pipeline.predict_proba(X_test)[:, 1]
+y_pred_optimized = (y_proba_gb_test >= best_threshold).astype(int)
+
+print("\nClassification Report with Validation-Selected Threshold:")
+print(classification_report(y_test, y_pred_optimized, zero_division=0))
+print(f"Test ROC-AUC: {roc_auc_score(y_test, y_proba_gb_test):.4f}")
+
+#Step 6: SHAP Explainability Analysis
+#====================================
+import shap
+
+fitted_preprocessor = gb_pipeline.named_steps["preprocessor"]
+fitted_model = gb_pipeline.named_steps["model"]
+
+X_train_transformed = fitted_preprocessor.transform(X_train)
+X_test_transformed = fitted_preprocessor.transform(X_test)
+feature_names = fitted_preprocessor.get_feature_names_out()
+
+if hasattr(X_train_transformed, "toarray"):
+    X_train_transformed = X_train_transformed.toarray()
+if hasattr(X_test_transformed, "toarray"):
+    X_test_transformed = X_test_transformed.toarray()
+
+X_train_transformed_df = pd.DataFrame(
+    X_train_transformed,
+    columns=feature_names,
+    index=X_train.index,
+)
+X_test_transformed_df = pd.DataFrame(
+    X_test_transformed,
+    columns=feature_names,
+    index=X_test.index,
+)
+
+explainer = shap.TreeExplainer(fitted_model)
+shap_values = explainer(X_test_transformed_df)
+
+plt.figure(figsize=(10, 6))
+shap.summary_plot(shap_values, X_test_transformed_df, show=False)
+plt.title("SHAP Feature Importance (Top Churn Drivers)", fontsize=14, pad=20)
 plt.tight_layout()
 plt.show()
