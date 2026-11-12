@@ -375,6 +375,7 @@ print(confusion_matrix(y_test, y_pred))
 #check class imbalance
 #adjust evaluation strategy
 
+# Mz's model-comparison code begins
 #Phase 4: Training and Comparing Multiple Models
 #===============================================
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -448,6 +449,8 @@ plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
 
+# Mz's model-comparison code ends
+# Lily's additions begin: threshold optimization and SHAP analysis
 #Step 5: Decision Threshold Optimization for Gradient Boosting
 #==============================================================
 # Select the threshold on validation data so the test set remains untouched.
@@ -550,3 +553,4 @@ shap.summary_plot(shap_values, X_test_transformed_df, show=False)
 plt.title("SHAP Feature Importance (Top Churn Drivers)", fontsize=14, pad=20)
 plt.tight_layout()
 plt.show()
+# Lily's additions end
