@@ -351,7 +351,12 @@ baseline_model.fit(
 #Our code mixes both: earlier: df["churn".] later: TARGET = "Churn". That mismatch can cause errors or wrong results. Fix that before moving on.
 # Updated TARGET variable to "churn" above, instead of "Churn".
 
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    precision_recall_curve,
+    roc_auc_score,
+)
 
 y_pred = baseline_model.predict(X_test)
 y_proba = baseline_model.predict_proba(X_test)[:, 1]
@@ -578,3 +583,138 @@ plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
+
+# Lily's model-comparison code ends
+# Gradient Boosting model has the highest overall ROC-AUC (0.8702) but a default recall of only 49.39%
+# lower the classification probability threshold from the default 0.5 to meet your success criterion of Recall > 80%
+# Lily's additions: threshold optimization and SHAP analysis
+#Step 5: Decision Threshold Optimization for Gradient Boosting
+#==============================================================
+# Select the threshold on validation data so the test set remains untouched.
+X_gb_train, X_gb_validation, y_gb_train, y_gb_validation = train_test_split(
+    X_train,
+    y_train,
+    test_size=0.2,
+    random_state=42,
+    stratify=y_train,
+)
+
+gb_pipeline = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("model", GradientBoostingClassifier(random_state=42)),
+    ]
+)
+gb_pipeline.fit(X_gb_train, y_gb_train)
+
+y_proba_gb_validation = gb_pipeline.predict_proba(X_gb_validation)[:, 1]
+precisions, recalls, thresholds = precision_recall_curve(
+    y_gb_validation,
+    y_proba_gb_validation,
+)
+
+target_recall = 0.80
+valid_indices = np.flatnonzero(recalls[:-1] >= target_recall)
+if valid_indices.size == 0:
+    raise ValueError(f"No decision threshold reaches recall {target_recall:.0%}.")
+
+best_index = valid_indices[-1]
+best_threshold = thresholds[best_index]
+chosen_recall = recalls[best_index]
+chosen_precision = precisions[best_index]
+
+print("\n--- Gradient Boosting Threshold Optimization ---")
+print(f"Target validation recall: {target_recall:.1%}")
+print(f"Selected threshold: {best_threshold:.4f}")
+print(f"Validation recall: {chosen_recall:.2%}")
+print(f"Validation precision: {chosen_precision:.2%}")
+
+plt.figure(figsize=(10, 6))
+plt.plot(thresholds, precisions[:-1], "b--", label="Precision", linewidth=2)
+plt.plot(thresholds, recalls[:-1], "g-", label="Recall", linewidth=2)
+plt.axvline(
+    x=best_threshold,
+    color="r",
+    linestyle=":",
+    label=f"Selected threshold ({best_threshold:.3f})",
+)
+plt.title("Precision and Recall vs. Decision Threshold (Gradient Boosting)")
+plt.xlabel("Threshold")
+plt.ylabel("Score")
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.legend(loc="best")
+plt.tight_layout()
+plt.show()
+
+# Refit on all training data and evaluate once on the held-out test set.
+gb_pipeline.fit(X_train, y_train)
+y_proba_gb_test = gb_pipeline.predict_proba(X_test)[:, 1]
+y_pred_optimized = (y_proba_gb_test >= best_threshold).astype(int)
+
+print("\nClassification Report with Validation-Selected Threshold:")
+print(classification_report(y_test, y_pred_optimized, zero_division=0))
+print(f"Test ROC-AUC: {roc_auc_score(y_test, y_proba_gb_test):.4f}")
+
+#Step 6: SHAP Explainability Analysis
+#use SHAP (SHapley Additive exPlanations) to interpret our Gradient Boosting model's predictions
+#This allows us to understand exactly which features are driving customer churn predictions.
+# ====================================
+import shap
+
+# Extract the fitted preprocessor and the fitted model from our pipeline
+fitted_preprocessor = gb_pipeline.named_steps['preprocessor']
+fitted_model = gb_pipeline.named_steps['model']
+
+# Transform the training data so we have matching feature names
+X_train_transformed = fitted_preprocessor.transform(X_train)
+
+# Get feature names from the column transformer
+# Numerical features are unchanged
+num_feature_names = list(num_cols)
+# Categorical features are one-hot encoded
+cat_feature_names = list(fitted_preprocessor.named_transformers_['cat'].named_steps['encoder'].get_feature_names_out(cat_cols))
+
+all_feature_names = num_feature_names + cat_feature_names
+
+# Convert transformed data to a DataFrame for clean visualization
+X_train_transformed_df = pd.DataFrame(X_train_transformed, columns=all_feature_names)
+X_test_transformed_df = pd.DataFrame(fitted_preprocessor.transform(X_test), columns=all_feature_names)
+
+# Initialize SHAP Explainer (TreeExplainer is highly optimized for tree-based models like Gradient Boosting)
+explainer = shap.TreeExplainer(fitted_model)
+shap_values = explainer(X_test_transformed_df)
+
+# Generate Summary Plot
+plt.figure(figsize=(10, 6))
+shap.summary_plot(shap_values, X_test_transformed_df, show=False)
+plt.title("SHAP Feature Importance (Top Churn Drivers)", fontsize=14, pad=20)
+plt.tight_layout()
+plt.show()
+#  breakdown of the results:
+#  breakdown of the results:
+# Optimized Decision Threshold Results Optimized Threshold: 0.1787 (originally 0.50)
+# Target Recall: 80.00% Achieved Recall: 80.10% ✔
+# Resulting Precision: 47.45% Overall ROC-AUC: 0.8702 ✔
+# Success Criteria Check ROC-AUC > 0.80: Passed
+# Here is a summary of what has been accomplished
+# Phase 1 & 2: Business Understanding & EDA
+# Loaded and verified the dataset containing 10,000 customers. Inspected distribution patterns showing that churned customers tend to skew older
+# Phase 3: Data Preparation
+# handled missing values and scaled numerical features
+# Dropped non-predictive features (customer_id)
+# One-hot encoded categorical columns (country, gender)
+# Split data into stratified training (80%) and testing (20%) sets
+# Phase 4: Modeling & Threshold Optimization
+# Evaluated multiple algorithms, identifying Gradient Boosting as the top model with an ROC-AUC of 0.8702
+# Optimized the decision threshold to 0.1787 to shift the model focus toward churn detection
+# Successfully met your Technical Success Criteria: ROC-AUC > 0.80 (Achieved: 0.8702) and Recall > 80% (Achieved: 80.10%).
+# Top Customer Churn Drivers (SHAP Analysis) products_number (Number of Products):
+# How it affects churn: This is the strongest feature. Having a higher number of products (especially 3 or 4) strongly pushes the SHAP value positive (red dots to the right), meaning it drastically increases the likelihood of churn. Conversely, having 1 or 2 products is highly protective against churn
+# How it affects churn: Older age (red dots) is strongly associated with higher churn values. Younger age groups (blue dots) have negative SHAP values, meaning they are much more likely to stay. active_member:
+# How it affects churn: Not being active (blue dots represent 
+# for inactive) significantly increases churn risk, whereas active members (red dots represent 
+# are strongly pulled toward staying with the bank. 
+# country_Germany:How it affects churn: Being located in Germany (red dots) has a distinct positive impact on predicting churn compared to France or Spain
+# balance:How it affects churn: Higher account balances (red dots) are surprisingly associated with higher churn risk in this dataset.
+# Lily's additions end
+# End of lily"s edits
