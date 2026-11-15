@@ -375,8 +375,8 @@ print(confusion_matrix(y_test, y_pred))
 #check class imbalance
 #adjust evaluation strategy
 
-# Mz's model-comparison code begins
-#Phase 4: Training and Comparing Multiple Models
+# Lily model-comparison code begins
+#Phase 5: Training and Comparing Multiple Models
 #===============================================
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.metrics import precision_score, recall_score, f1_score
@@ -449,8 +449,10 @@ plt.grid(axis="y", linestyle="--", alpha=0.7)
 plt.tight_layout()
 plt.show()
 
-# Mz's model-comparison code ends
-# Lily's additions begin: threshold optimization and SHAP analysis
+# Lily's model-comparison code ends
+# Gradient Boosting model has the highest overall ROC-AUC (0.8702) but a default recall of only 49.39%
+# lower the classification probability threshold from the default 0.5 to meet your success criterion of Recall > 80%
+# Lily's additions: threshold optimization and SHAP analysis
 #Step 5: Decision Threshold Optimization for Gradient Boosting
 #==============================================================
 # Select the threshold on validation data so the test set remains untouched.
@@ -519,38 +521,65 @@ print(classification_report(y_test, y_pred_optimized, zero_division=0))
 print(f"Test ROC-AUC: {roc_auc_score(y_test, y_proba_gb_test):.4f}")
 
 #Step 6: SHAP Explainability Analysis
-#====================================
+#use SHAP (SHapley Additive exPlanations) to interpret our Gradient Boosting model's predictions
+#This allows us to understand exactly which features are driving customer churn predictions.
+# ====================================
 import shap
 
-fitted_preprocessor = gb_pipeline.named_steps["preprocessor"]
-fitted_model = gb_pipeline.named_steps["model"]
+# Extract the fitted preprocessor and the fitted model from our pipeline
+fitted_preprocessor = gb_pipeline.named_steps['preprocessor']
+fitted_model = gb_pipeline.named_steps['model']
 
+# Transform the training data so we have matching feature names
 X_train_transformed = fitted_preprocessor.transform(X_train)
-X_test_transformed = fitted_preprocessor.transform(X_test)
-feature_names = fitted_preprocessor.get_feature_names_out()
 
-if hasattr(X_train_transformed, "toarray"):
-    X_train_transformed = X_train_transformed.toarray()
-if hasattr(X_test_transformed, "toarray"):
-    X_test_transformed = X_test_transformed.toarray()
+# Get feature names from the column transformer
+# Numerical features are unchanged
+num_feature_names = list(num_cols)
+# Categorical features are one-hot encoded
+cat_feature_names = list(fitted_preprocessor.named_transformers_['cat'].named_steps['encoder'].get_feature_names_out(cat_cols))
 
-X_train_transformed_df = pd.DataFrame(
-    X_train_transformed,
-    columns=feature_names,
-    index=X_train.index,
-)
-X_test_transformed_df = pd.DataFrame(
-    X_test_transformed,
-    columns=feature_names,
-    index=X_test.index,
-)
+all_feature_names = num_feature_names + cat_feature_names
 
+# Convert transformed data to a DataFrame for clean visualization
+X_train_transformed_df = pd.DataFrame(X_train_transformed, columns=all_feature_names)
+X_test_transformed_df = pd.DataFrame(fitted_preprocessor.transform(X_test), columns=all_feature_names)
+
+# Initialize SHAP Explainer (TreeExplainer is highly optimized for tree-based models like Gradient Boosting)
 explainer = shap.TreeExplainer(fitted_model)
 shap_values = explainer(X_test_transformed_df)
 
+# Generate Summary Plot
 plt.figure(figsize=(10, 6))
 shap.summary_plot(shap_values, X_test_transformed_df, show=False)
 plt.title("SHAP Feature Importance (Top Churn Drivers)", fontsize=14, pad=20)
 plt.tight_layout()
 plt.show()
+#  breakdown of the results:
+#  breakdown of the results:
+# Optimized Decision Threshold Results Optimized Threshold: 0.1787 (originally 0.50)
+# Target Recall: 80.00% Achieved Recall: 80.10% ✔
+# Resulting Precision: 47.45% Overall ROC-AUC: 0.8702 ✔
+# Success Criteria Check ROC-AUC > 0.80: Passed
+# Here is a summary of what has been accomplished
+# Phase 1 & 2: Business Understanding & EDA
+# Loaded and verified the dataset containing 10,000 customers. Inspected distribution patterns showing that churned customers tend to skew older
+# Phase 3: Data Preparation
+# handled missing values and scaled numerical features
+# Dropped non-predictive features (customer_id)
+# One-hot encoded categorical columns (country, gender)
+# Split data into stratified training (80%) and testing (20%) sets
+# Phase 4: Modeling & Threshold Optimization
+# Evaluated multiple algorithms, identifying Gradient Boosting as the top model with an ROC-AUC of 0.8702
+# Optimized the decision threshold to 0.1787 to shift the model focus toward churn detection
+# Successfully met your Technical Success Criteria: ROC-AUC > 0.80 (Achieved: 0.8702) and Recall > 80% (Achieved: 80.10%).
+# Top Customer Churn Drivers (SHAP Analysis) products_number (Number of Products):
+# How it affects churn: This is the strongest feature. Having a higher number of products (especially 3 or 4) strongly pushes the SHAP value positive (red dots to the right), meaning it drastically increases the likelihood of churn. Conversely, having 1 or 2 products is highly protective against churn
+# How it affects churn: Older age (red dots) is strongly associated with higher churn values. Younger age groups (blue dots) have negative SHAP values, meaning they are much more likely to stay. active_member:
+# How it affects churn: Not being active (blue dots represent 
+# for inactive) significantly increases churn risk, whereas active members (red dots represent 
+# are strongly pulled toward staying with the bank. 
+# country_Germany:How it affects churn: Being located in Germany (red dots) has a distinct positive impact on predicting churn compared to France or Spain
+# balance:How it affects churn: Higher account balances (red dots) are surprisingly associated with higher churn risk in this dataset.
 # Lily's additions end
+# End of lily"s edits
